@@ -1,6 +1,8 @@
 <?php
 require_once('LogTailerListener.php');
 
+define ('TAILER_TIME_INTERVAL', 5);
+
 /**
  * Listens for a log file and triggers event when a new log line is
  * is added to the file.
@@ -12,6 +14,9 @@ class LogTailer {
 
 	// the path of the log file to tail
 	private $filename;
+
+	// the value of the file pointer
+	private $filePointer;
 
 	// define if the tailer should start at the beginning including all lines
 	private $startAtBeginning;
@@ -31,9 +36,10 @@ class LogTailer {
 	 * 		log file or not
 	 * @throws Exception if file does not exist or is not readable
 	 */
-	public function __construct($filename, $sampleInterval=5, $startAtBeginning=true) {
+	public function __construct($filename, $sampleInterval=TAILER_TIME_INTERVAL, $startAtBeginning=true) {
 		$this->sampleInterval = $sampleInterval;
 		$this->filename = $filename;
+		$this->filePointer = 0;
 		$this->startAtBeginning = $startAtBeginning;
 		$this->tailing = false;
 		$this->listeners = array();
@@ -55,13 +61,11 @@ class LogTailer {
 			throw new Exception('Error: File does not exist or is not readable.');
 		}
 
-		$filePointer = 0;
-
 		if($this->startAtBeginning) {
-			$filePointer = 0;
+			$this->filePointer = 0;
 		}
 		else {
-			$filePointer = filesize($this->filename) - 1;
+			$this->filePointer = filesize($this->filename) - 1;
 		}
 
 		$this->tailing = true;
@@ -71,24 +75,23 @@ class LogTailer {
 			$fileLength = filesize($this->filename);
 			$logfile = fopen($this->filename, "r");
 			
-			if ($fileLength < $filePointer) {
+			if ($fileLength < $this->filePointer) {
 				// file was deleted or rotated, reset pointer
 				$filePointer = 0;
 			}
 			
-			if ($fileLength > $filePointer) {
+			if ($fileLength > $this->filePointer) {
 				// there is data to read
-				fseek($logfile, $filePointer);
+				fseek($logfile, $this->filePointer);
 				
 				// TODO: check if line is complete
 				while(!feof($logfile)) {
 					$line = fgets($logfile);
 					$this->fireNewLineAdded($line);
+					$this->filePointer = ftell($logfile);
 				}
-				$filePointer = ftell($logfile);
 				fclose($logfile);
 			}
-
 			sleep($this->sampleInterval);
 		}
 	}
